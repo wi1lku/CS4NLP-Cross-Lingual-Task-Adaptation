@@ -1,1 +1,1 @@
-# CS4NLP-Cross-Lingual-Task-Adaptation
+# CS4NLP: Cross Lingual Task Adaptation
