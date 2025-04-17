@@ -66,7 +66,7 @@ else:
 
 # Initialize wandb if specified
 if WANDB:
-    run = wandb.init(
+    wandb.init(
         entity="cs4nlp",
         project="NLI",
         name=MODEL_NAME,
@@ -91,6 +91,9 @@ if WANDB:
 
 
 def main():
+    print(f"\nTraining LoRA adapter for NLI model: {MODEL_NAME}")
+    print(f"Using device: {DEVICE}")
+    print(f"Using WandB: {WANDB}")
 
     # Clear CUDA cache before model initialization
     torch.manual_seed(0)    
@@ -209,7 +212,7 @@ def main():
         val_loss /= len(val_loader.dataset)
         val_losses.append(val_loss)
 
-        if args.wandb:
+        if WANDB:
             wandb.log({"train_loss": train_loss, "val_loss": val_loss})
 
         print(f"Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
@@ -223,9 +226,9 @@ def main():
             print(f"New best LoRA adapter saved at epoch {epoch+1} with validation loss: {val_loss:.4f}")
 
 
-        if args.wandb:
-            wandb.log({"best_val_loss": best_val_loss})
-            wandb.finish()
+    if WANDB:
+        wandb.log({"best_val_loss": best_val_loss})
+        wandb.finish()
             
     print(f"\nBest model was from epoch {best_epoch+1} with validation loss: {best_val_loss:.4f}")
     print(f"Training completed in: {(time.time() - training_start_time) // 60}m {(time.time() - training_start_time) % 60:.0f}s")
