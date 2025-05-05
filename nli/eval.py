@@ -5,13 +5,11 @@ import os
 from functools import partial
 
 import torch
+import wandb
 from peft import PeftModel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (AutoModelForCausalLM, AutoTokenizer,
-                          LogitsProcessorList)
-
-import wandb
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from utils_data import XNLIDataset
 
 TEST_DATA_PATH = "./data/xnli.test.jsonl"
@@ -36,7 +34,7 @@ parser.add_argument("--language",
 parser.add_argument("--batch_size",
                     type=int,
                     default=8,
-                    help="Batch size (eval)")
+                    help="Batch size (val)")
 parser.add_argument("--wandb",
                     action=argparse.BooleanOptionalAction,
                     help="Log metrics to the same W&B project")
@@ -45,8 +43,73 @@ args = parser.parse_args()
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def main():
+def evaluate_model(model, tokenizer, dataloader, device):
+    model.eval()
+    total_loss, n_tokens = 0.0, 0
+    n_correct, n_examples = 0, 0
 
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc="Evaluating", leave=False):
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+            gold_labels = batch["gold_label"]
+
+            # Compute loss
+            outputs = model(input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            labels=labels)
+            loss = outputs.loss
+            total_loss += loss.item() * input_ids.size(0)
+            n_tokens += input_ids.size(0)
+
+            # Generate predictions
+            for i in range(len(input_ids)):
+                full_input = input_ids[i]
+                full_mask = attention_mask[i]
+                full_label = labels[i]
+
+                # Strip label tokens
+                label_mask = full_label != -100
+                label_start = label_mask.nonzero(as_tuple=True)[0][0].item()
+
+                # Truncate input and attention mask to exclude the gold label
+                prompt_input = full_input[:label_start].unsqueeze(0)
+                prompt_mask = full_mask[:label_start].unsqueeze(0)
+
+                # Generate prediction based only on the prompt
+                generated = model.generate(
+                    input_ids=prompt_input,
+                    attention_mask=prompt_mask,
+                    max_new_tokens=5,
+                    num_beams=1,
+                    do_sample=False,
+                    pad_token_id=tokenizer.pad_token_id,
+                    eos_token_id=tokenizer.eos_token_id,
+                )
+
+                # Get generated label
+                generated_label_ids = generated[0][label_start:]
+                predicted_text = tokenizer.decode(
+                    generated_label_ids,
+                    skip_special_tokens=True).strip().lower()
+                gold_text = gold_labels[i].strip().lower()
+
+                if predicted_text.startswith(gold_text):
+                    n_correct += 1
+                n_examples += 1
+
+    mean_loss = total_loss / n_tokens if n_tokens > 0 else 0.0
+    accuracy = 100 * n_correct / n_examples if n_examples > 0 else 0.0
+
+    print("\nResults:")
+    print(f"Mean loss     : {mean_loss:.4f}")
+    print(f"Accuracy      : {accuracy:.2f} ({n_correct}/{n_examples})")
+
+    return mean_loss, accuracy
+
+
+def main():
     config_file = os.path.join(args.adapter_path, "adapter_config.json")
     with open(config_file) as f:
         cfg = json.load(f)
@@ -73,11 +136,11 @@ def main():
     print(f"Loading LoRA adapter from {args.adapter_path}")
     tokenizer = AutoTokenizer.from_pretrained(base_model_path)
     tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
 
     base_model = AutoModelForCausalLM.from_pretrained(base_model_path)
     model = PeftModel.from_pretrained(base_model, args.adapter_path)
     model = model.to(DEVICE)
-    model.eval()
 
     # Load dataset
     print(
@@ -96,63 +159,8 @@ def main():
     )
     print(f"Test size: {len(eval_dataset)}")
 
-    # Make predictions
-    total_loss, n_tokens = 0.0, 0
-    n_correct, n_examples = 0, 0
-
-    with torch.no_grad():
-        for batch in tqdm(eval_loader, desc="Evaluating"):
-            input_ids = batch["input_ids"].to(DEVICE)
-            attention_mask = batch["attention_mask"].to(DEVICE)
-            labels = batch["labels"].to(DEVICE)
-            gold_labels = batch[
-                "gold_label"]  # list of strings, shape [batch_size]
-
-            # Get model outputs
-            outputs = model(input_ids=input_ids,
-                            attention_mask=attention_mask,
-                            labels=labels)
-            loss = outputs.loss
-            total_loss += loss.item() * input_ids.size(0)
-            n_tokens += input_ids.size(0)
-
-            # Get predicted token ids
-            logits = outputs.logits
-            pred_token_ids = logits.argmax(dim=-1)  # [batch_size, seq_len]
-
-            # Go over each sample in the batch
-            for i in range(input_ids.size(0)):
-                label_mask = labels[i] != -100
-                label_indices = label_mask.nonzero(as_tuple=True)[0]
-
-                if len(label_indices) == 0:
-                    continue
-
-                # Include one token before the label to ensure full decoding
-                start = max(label_indices[0].item() - 1, 0)
-                end = label_indices[-1].item() + 1
-                predicted_ids = pred_token_ids[i][start:end]
-
-                predicted_text = tokenizer.decode(
-                    predicted_ids, skip_special_tokens=True).strip().lower()
-                gold_text = gold_labels[i].strip().lower()
-
-                if predicted_text.startswith(gold_text):  # prefix match
-                    n_correct += 1
-                n_examples += 1
-
-                # print("Predicted label text (only -100):", tokenizer.decode(pred_token_ids[0][label_mask], skip_special_tokens=True).strip() )
-                # print("Predicted label:", predicted_text)
-                # print("Gold label:", gold_text)
-
-    # Compute metrics
-    mean_loss = total_loss / n_tokens
-
-    print("\nResults:")
-    print(f"Mean loss     : {mean_loss:.4f}")
-    accuracy = 100 * n_correct / n_examples if n_examples else 0.0
-    print(f"Accuracy      : {accuracy:.2f}%  "
-          f"({n_correct}/{n_examples})")
+    # Evaluate model
+    mean_loss, accuracy = evaluate_model(model, tokenizer, eval_loader, DEVICE)
 
     if args.wandb:
         wandb.log({
