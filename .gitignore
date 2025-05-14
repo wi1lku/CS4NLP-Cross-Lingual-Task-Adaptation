@@ -178,3 +178,5 @@ wandb/
 models/
 logs/
 datasets/
+
+pos/data
