@@ -178,3 +178,4 @@ wandb/
 models/
 logs/
 datasets/
+tmp*

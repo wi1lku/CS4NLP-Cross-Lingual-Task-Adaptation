@@ -10,7 +10,8 @@ from peft import get_peft_model, LoraConfig
 from tqdm import tqdm
 from functools import partial
 
-from utils_data import XNLIDataset
+from data import XNLIDatasetTrain
+from utils import refine_predictions, calculate_metrics
 
 print = partial(print, flush=True)
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
@@ -25,7 +26,7 @@ LEARNING_RATE = 2e-5
 WEIGHT_DECAY = 0.01
 SCHEDULER_TYPE = "cosine"
 WARMUP_STEPS = 0.05
-DS_SIZE = "full"
+DS_SIZE = 1.0
 NUM_WORKERS = 2
 PIN_MEMORY = True
 LORA_CONFIG = LoraConfig(
@@ -47,7 +48,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 parser = argparse.ArgumentParser()
 parser.add_argument("--language", type=str, default=LANGUAGE, help="Language to train on")
 parser.add_argument("--wandb", action=argparse.BooleanOptionalAction, help="Flag to enable wandb logging")
-parser.add_argument("--ds_size", type=str, default=DS_SIZE, help="Size of the dataset to use (full or half)")
+parser.add_argument("--ds_size", type=float, default=DS_SIZE, help="Size of the dataset to use (float)")
 parser.add_argument("--num_epochs", type=int, default=NUM_EPOCHS, help="Number of epochs to train")
 parser.add_argument("--batch_size", type=int, default=BATCH_SIZE, help="Batch size for training")
 parser.add_argument("--model_name", type=str, default=MODEL_NAME, help="Name of the output model file")
@@ -59,10 +60,7 @@ LANGUAGE = args.language
 MODEL_NAME = args.model_name
 NUM_EPOCHS = args.num_epochs
 BATCH_SIZE = args.batch_size
-if args.ds_size in ["full", "half"]:
-    DS_SIZE = args.ds_size
-else:
-    raise ValueError("ds_size must be either 'full' or 'half'")
+DS_SIZE = args.ds_size
 
 # Initialize wandb if specified
 if WANDB:
@@ -72,6 +70,7 @@ if WANDB:
         name=MODEL_NAME,
         config = {
             "language": LANGUAGE,
+            "ds_size": DS_SIZE,
             "model_name": MODEL_NAME,
             "num_epochs": NUM_EPOCHS,
             "batch_size": BATCH_SIZE,
@@ -123,7 +122,7 @@ def main():
     print(f"Dataset size: {DS_SIZE}")
     print(f"Dataset path: {os.path.abspath(TRAIN_DATA_PATH)}")
 
-    train_full_dataset = XNLIDataset(TRAIN_DATA_PATH, tokenizer, DS_SIZE, LANGUAGE)
+    train_full_dataset = XNLIDatasetTrain(TRAIN_DATA_PATH, tokenizer, DS_SIZE, LANGUAGE)
     total_size = len(train_full_dataset)
     train_size = int(0.8 * total_size)  # 80% for training
     val_size = total_size - train_size    # 20% for validation
@@ -174,6 +173,8 @@ def main():
         # Training phase
         model.train()
         train_loss = 0.0
+        predictions = []
+        labels = []
 
         for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}"):
             
@@ -192,12 +193,31 @@ def main():
             
             train_loss += loss.item() * batch["input_ids"].size(0)
 
+            # get predictions
+            predictions_batch, labels_batch = get_predictions_labels(batch, outputs, tokenizer)
+            predictions.extend(predictions_batch)
+            labels.extend(labels_batch)
+
         train_loss /= len(train_loader.dataset)
         train_losses.append(train_loss)
+
+        # Calculate training metrics
+        predictions = refine_predictions(predictions)
+        metrics = calculate_metrics(labels, predictions)
+        for k in list(metrics.keys()):
+            metrics["train_" + k] = metrics.pop(k)
+
+        # Print training metrics
+        print("\ntrain_loss:", train_loss)
+        for k in metrics:
+            print(f"{k}: {metrics[k]:.4f}")
+        
         
         # Validation phase
         model.eval()
         val_loss = 0.0
+        predictions = []
+        labels = []
 
         with torch.no_grad():
             for batch in tqdm(val_loader, desc=f"Validation"):
@@ -209,11 +229,30 @@ def main():
                 loss = outputs.loss
                 val_loss += loss.item() * batch["input_ids"].size(0)
 
+                # get predictions
+                predictions_batch, labels_batch = get_predictions_labels(batch, outputs, tokenizer)
+                predictions.extend(predictions_batch)
+                labels.extend(labels_batch)
+
         val_loss /= len(val_loader.dataset)
         val_losses.append(val_loss)
 
+        # Calculate validation metrics
+        predictions = refine_predictions(predictions)
+        metrics = calculate_metrics(labels, predictions)
+        for k in list(metrics.keys()):
+            metrics["val_" + k] = metrics.pop(k)
+
+        # Print validation metrics
+        print("\nval_loss:", val_loss)
+        for k in metrics:
+            print(f"{k}: {metrics[k]:.4f}")
+
+        # Log metrics to wandb
         if WANDB:
-            wandb.log({"train_loss": train_loss, "val_loss": val_loss})
+            metrics["train_loss"] = train_loss
+            metrics["val_loss"] = val_loss
+            wandb.log(metrics)
 
         print(f"Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
         print(f"Epoch {epoch+1} completed in: {(time.time() - epoch_start_time) // 60}m {(time.time() - epoch_start_time) % 60:.0f}s")
@@ -227,6 +266,7 @@ def main():
 
 
     if WANDB:
+        wandb.log({"best_epoch": best_epoch})
         wandb.log({"best_val_loss": best_val_loss})
         wandb.finish()
             

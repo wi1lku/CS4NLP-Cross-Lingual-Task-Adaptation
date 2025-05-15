@@ -1,6 +1,5 @@
 import argparse
 import json
-import math
 import os
 from functools import partial
 
@@ -10,7 +9,9 @@ from peft import PeftModel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from utils_data import XNLIDataset
+
+from data import XNLIDatasetTest
+from utils import refine_predictions, calculate_metrics
 
 TEST_DATA_PATH = "./data/xnli.test.jsonl"
 NUM_WORKERS = 2
@@ -45,68 +46,50 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def evaluate_model(model, tokenizer, dataloader, device):
     model.eval()
-    total_loss, n_tokens = 0.0, 0
-    n_correct, n_examples = 0, 0
+    predictions = []
+    labels = []
 
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Evaluating", leave=False):
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
-            labels = batch["labels"].to(device)
-            gold_labels = batch["gold_label"]
 
-            # Compute loss
-            outputs = model(input_ids=input_ids,
-                            attention_mask=attention_mask,
-                            labels=labels)
-            loss = outputs.loss
-            total_loss += loss.item() * input_ids.size(0)
-            n_tokens += input_ids.size(0)
+            # Get data
+            inputs = tokenizer(batch["input"], return_tensors="pt", padding=True, padding_side='left').to(DEVICE)
+            
+            # Make prediction - deterministic!
+            outputs = model.generate(
+                input_ids=inputs['input_ids'],
+                attention_mask=inputs['attention_mask'],
+                max_new_tokens=5,
+                do_sample=False,
+                temperature=None,
+                top_p=None
+            )
 
-            # Generate predictions
-            for i in range(len(input_ids)):
-                full_input = input_ids[i]
-                full_mask = attention_mask[i]
-                full_label = labels[i]
+            # Get predictions
+            predictions_ids = [
+                output[len(input_ids):]
+                for output, input_ids in zip(outputs, inputs['input_ids'])
+            ]
 
-                # Strip label tokens
-                label_mask = full_label != -100
-                label_start = label_mask.nonzero(as_tuple=True)[0][0].item()
+            predictions.extend([
+                tokenizer.decode(prediction, skip_special_tokens=True).strip().lower()
+                for prediction in predictions_ids
+            ])
+            labels.extend(batch["label"])
 
-                # Truncate input and attention mask to exclude the gold label
-                prompt_input = full_input[:label_start].unsqueeze(0)
-                prompt_mask = full_mask[:label_start].unsqueeze(0)
+        # Refine predictions
+        predictions = refine_predictions(predictions)
 
-                # Generate prediction based only on the prompt
-                generated = model.generate(
-                    input_ids=prompt_input,
-                    attention_mask=prompt_mask,
-                    max_new_tokens=5,
-                    num_beams=1,
-                    do_sample=False,
-                    pad_token_id=tokenizer.pad_token_id,
-                    eos_token_id=tokenizer.eos_token_id,
-                )
-
-                # Get generated label
-                generated_label_ids = generated[0][label_start:]
-                predicted_text = tokenizer.decode(
-                    generated_label_ids,
-                    skip_special_tokens=True).strip().lower()
-                gold_text = gold_labels[i].strip().lower()
-
-                if predicted_text.startswith(gold_text):
-                    n_correct += 1
-                n_examples += 1
-
-    mean_loss = total_loss / n_tokens if n_tokens > 0 else 0.0
-    accuracy = 100 * n_correct / n_examples if n_examples > 0 else 0.0
+        # Calculate metrics
+        metrics = calculate_metrics(labels, predictions)
+        for k in list(metrics.keys()):
+            metrics["test_" + k] = metrics.pop(k)
 
     print("\nResults:")
-    print(f"Mean loss     : {mean_loss:.4f}")
-    print(f"Accuracy      : {accuracy:.2f} ({n_correct}/{n_examples})")
+    for metric in metrics:
+        print(f"{metric}: {metrics[metric]:.4f}")
 
-    return mean_loss, accuracy
+    return metrics
 
 
 def main():
@@ -141,15 +124,18 @@ def main():
     base_model = AutoModelForCausalLM.from_pretrained(base_model_path)
     model = PeftModel.from_pretrained(base_model, args.adapter_path)
     model = model.to(DEVICE)
+    model.generation_config.pad_token_id = tokenizer.pad_token_id
 
     # Load dataset
     print(
         f"\nLoading XNLI {args.language} set from {os.path.abspath(TEST_DATA_PATH)}"
     )
-    eval_dataset = XNLIDataset(TEST_DATA_PATH,
-                               tokenizer,
-                               size="full",
-                               language=args.language)
+    eval_dataset = XNLIDatasetTest(
+        TEST_DATA_PATH,
+        tokenizer,
+        size="full",
+        language=args.language
+    )
     eval_loader = DataLoader(
         eval_dataset,
         batch_size=args.batch_size,
@@ -160,13 +146,10 @@ def main():
     print(f"Test size: {len(eval_dataset)}")
 
     # Evaluate model
-    mean_loss, accuracy = evaluate_model(model, tokenizer, eval_loader, DEVICE)
+    metrics = evaluate_model(model, tokenizer, eval_loader, DEVICE)
 
     if args.wandb:
-        wandb.log({
-            "eval_loss": mean_loss,
-            "accuracy": accuracy,
-        })
+        wandb.log(metrics)
         wandb.finish()
 
 
