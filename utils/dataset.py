@@ -8,7 +8,7 @@ from typing import Iterable
 
 
 
-class PromptDataset(Dataset):
+class PromptDatasetTrain(Dataset):
     """ LLM Prompt Dataset class """
 
     def __init__(
@@ -24,6 +24,7 @@ class PromptDataset(Dataset):
             "attention_mask": [],
             "labels": [],
         }
+        gold_labels = []
 
         for prompt, label in datapoints:
             
@@ -38,19 +39,22 @@ class PromptDataset(Dataset):
 
             # Get tokenized ground truth label
             gold_label_tokenized = tokenizer(
-                label, add_special_tokens=False, return_tensors="pt"
-            )["input_ids"][0]
+                label,
+                add_special_tokens=False,
+                return_tensors="pt")["input_ids"][0]
 
             # Add gt label and EOS token to the end of the input
-            input_ids = torch.cat([input_ids, gold_label_tokenized, torch.tensor([tokenizer.eos_token_id])])
+            input_ids = torch.cat([
+                input_ids, gold_label_tokenized,
+                torch.tensor([tokenizer.eos_token_id])
+            ])
             attention_mask = torch.cat([
                 attention_mask,
                 torch.ones_like(gold_label_tokenized),
                 torch.tensor([1])
             ])
             labels_tokenized = torch.cat([
-                labels_tokenized,
-                gold_label_tokenized,
+                labels_tokenized, gold_label_tokenized,
                 torch.tensor([tokenizer.pad_token_id])
             ])
 
@@ -59,24 +63,50 @@ class PromptDataset(Dataset):
             tokenized_data["attention_mask"].append(attention_mask)
             tokenized_data["labels"].append(labels_tokenized)
 
+            gold_labels.append(label)
+
         # Pad sequences to the same length
         tokenized_data["input_ids"] = pad_sequence(
-            tokenized_data["input_ids"], batch_first=True, padding_value=tokenizer.pad_token_id
-        )
+            tokenized_data["input_ids"],
+            batch_first=True,
+            padding_value=tokenizer.pad_token_id)
         tokenized_data["attention_mask"] = pad_sequence(
-            tokenized_data["attention_mask"], batch_first=True, padding_value=0
-        )
-        tokenized_data["labels"] = pad_sequence(
-            tokenized_data["labels"], batch_first=True, padding_value=-100
-        )
+            tokenized_data["attention_mask"],
+            batch_first=True,
+            padding_value=0)
+        tokenized_data["labels"] = pad_sequence(tokenized_data["labels"],
+                                                batch_first=True,
+                                                padding_value=-100)
 
         # Store as list of dicts
         self.data = [{
             "input_ids": tokenized_data["input_ids"][i],
             "attention_mask": tokenized_data["attention_mask"][i],
             "labels": tokenized_data["labels"][i],
+            "gold_label": gold_labels[i]
         } for i in range(len(tokenized_data["input_ids"]))]
         
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+    
+
+class PromptDatasetTest(Dataset):
+    """ Prompt Dataset class for training"""
+
+    def __init__(
+        self,
+        datapoints: Iterable[tuple[str,str]],
+    ):
+
+        # Store as list of dicts
+        self.data = [{
+            "input": prompt,
+            "label": label,
+        } for prompt, label in datapoints]
+
     def __len__(self):
         return len(self.data)
 
