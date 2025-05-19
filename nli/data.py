@@ -1,8 +1,4 @@
 import pandas as pd
-import torch
-from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import Dataset
-from transformers import PreTrainedTokenizerBase
 
 
 def create_xnli_prompt(premise: str, hypothesis: str) -> str:
@@ -12,25 +8,24 @@ def create_xnli_prompt(premise: str, hypothesis: str) -> str:
     prompt = f"Premise: {premise}\nHypothesis: {hypothesis}\nLabel: "
     return prompt
 
-def get_datapoints(train_data_path: str,
-                 test_data_path: str,
+def get_datapoints(data_paths,
                  size: float,
                  language: str):
-    
-    data_path = train_data_path
-    language = language
-    print("Data_path:", data_path)
+    datapointlist = []
+    for data_path in data_paths:
+        language = language
+        print("Data_path:", data_path)
 
-    # Load XNLI data from jsonl file
-    raw_data = pd.read_json(path_or_buf=data_path, lines=True)
+        # Load XNLI data from jsonl file
+        raw_data = pd.read_json(path_or_buf=data_path, lines=True)
 
-    # Filter data by language and size
-    raw_data = raw_data[raw_data["language"] == language]
-    raw_data = raw_data.iloc[:round(size * len(raw_data))]
+        # Filter data by language and size
+        raw_data = raw_data[raw_data["language"] == language]
+        raw_data = raw_data.iloc[:round(size * len(raw_data))]
 
-    datapoints = [
-        (create_xnli_prompt(row["sentence1"], row["sentence2"]), row["gold_label"])
-        for _, row in raw_data.iterrows()
-    ]
+        datapointlist.append([
+            (create_xnli_prompt(row["sentence1"], row["sentence2"]), row["gold_label"])
+            for _, row in raw_data.iterrows()
+        ])
 
-    return datapoints, []
+    return datapointlist

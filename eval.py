@@ -10,10 +10,10 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from data import XNLIDatasetTest
-from utils import refine_predictions, calculate_metrics
+from utils.dataset import PromptDatasetTest
+from utils.metrics import calculate_metrics
 
-TEST_DATA_PATH = "./data/xnli.test.jsonl"
+TEST_DATA_PATH = "./nli/data/xnli.test.jsonl"
 NUM_WORKERS = 2
 PIN_MEMORY = True
 
@@ -39,7 +39,22 @@ parser.add_argument("--batch_size",
 parser.add_argument("--wandb",
                     action=argparse.BooleanOptionalAction,
                     help="Log metrics to the same W&B project")
+parser.add_argument(
+    "--project_name",
+    type=str,
+    default="NLI",
+    help="Project name")
 args = parser.parse_args()
+
+PROJECT_NAME = args.project_name
+LANGUAGE = args.language
+
+if PROJECT_NAME == "NLI":
+    from nli.data import get_datapoints
+    from nli.utils import refine_predictions, correct_label
+else: 
+    from pos.data import get_datapoints
+    from pos.utils import refine_predictions, correct_label
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -81,7 +96,7 @@ def evaluate_model(model, tokenizer, dataloader, device):
         predictions = refine_predictions(predictions)
 
         # Calculate metrics
-        metrics = calculate_metrics(labels, predictions)
+        metrics = calculate_metrics(labels, predictions, correct_label)
         for k in list(metrics.keys()):
             metrics["test_" + k] = metrics.pop(k)
 
@@ -102,13 +117,13 @@ def main():
     if args.wandb:
         wandb.init(
             entity="cs4nlp",
-            project="NLI",
+            project=PROJECT_NAME,
             name=
-            f"eval_{args.language}_{os.path.basename(args.adapter_path.rstrip('/'))}",
+            f"eval_{LANGUAGE}_{os.path.basename(args.adapter_path.rstrip('/'))}",
             config={
                 "base_model": base_model_path,
                 "adapter": args.adapter_path,
-                "language": args.language,
+                "language": LANGUAGE,
                 "data": os.path.basename(TEST_DATA_PATH),
                 "batch_size": args.batch_size
             },
@@ -128,13 +143,16 @@ def main():
 
     # Load dataset
     print(
-        f"\nLoading XNLI {args.language} set from {os.path.abspath(TEST_DATA_PATH)}"
+        f"\nLoading XNLI {LANGUAGE} set from {os.path.abspath(TEST_DATA_PATH)}"
     )
-    eval_dataset = XNLIDatasetTest(
-        TEST_DATA_PATH,
-        tokenizer,
-        size="full",
-        language=args.language
+
+    [datapoints] = get_datapoints(
+        [TEST_DATA_PATH],
+        size=1.0,
+        language=LANGUAGE
+    )
+    eval_dataset = PromptDatasetTest(
+        datapoints = datapoints,
     )
     eval_loader = DataLoader(
         eval_dataset,

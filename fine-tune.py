@@ -54,8 +54,7 @@ parser.add_argument("--num_epochs", type=int, default=NUM_EPOCHS, help="Number o
 parser.add_argument("--batch_size", type=int, default=BATCH_SIZE, help="Batch size for training")
 parser.add_argument("--model_name", type=str, default=MODEL_NAME, help="Name of the output model file")
 parser.add_argument("--project_name", type=str, default="NLI", help="Project name")
-parser.add_argument("--train_data_path", type=str, default="./nli/data/xnli.dev.jsonl", help="Path to the training data")
-parser.add_argument("--val_data_path", type=str, default=None, help="Path to the validation data")
+parser.add_argument("--data_paths", type=str, nargs='+', default=["./nli/data/xnli.dev.jsonl"], help="Path to the training data")
 parser.add_argument("--output_dir", type=str, default=OUTPUT_DIR, help="Output directory for the model")
 args = parser.parse_args()
 
@@ -68,8 +67,7 @@ NUM_EPOCHS = args.num_epochs
 BATCH_SIZE = args.batch_size
 DS_SIZE = args.ds_size
 PROJECT_NAME = args.project_name
-TRAIN_DATA_PATH = args.train_data_path
-VAL_DATA_PATH = args.val_data_path
+DATA_PATHS = args.data_paths
 OUTPUT_DIR = args.output_dir
 
 if PROJECT_NAME == "NLI":
@@ -139,29 +137,34 @@ def main():
     print(f"\nLoading dataset...")
     print(f"Language: {LANGUAGE}")
     print(f"Dataset size: {DS_SIZE}")
-    print(f"Dataset path: {os.path.abspath(TRAIN_DATA_PATH)}")
+    print(f"Dataset paths: {[os.path.abspath(path) for path in DATA_PATHS]}")
 
 
 
-    train_datapoints, val_datapoints = get_datapoints(TRAIN_DATA_PATH, VAL_DATA_PATH, DS_SIZE, LANGUAGE)
+    datapoints = get_datapoints(DATA_PATHS, DS_SIZE, LANGUAGE)
 
-    print(train_datapoints[0])
-    train_dataset = PromptDatasetTrain(
-        datapoints=train_datapoints,
-        tokenizer=tokenizer
-    )
-    if not val_datapoints:
-            total_size = len(train_dataset)
-            train_size = int(0.8 * total_size)  # 80% for training
-            val_size = total_size - train_size    # 20% for validation
-            train_dataset, val_dataset = torch.utils.data.random_split(
-            train_dataset, [train_size, val_size]
-            )
-    else:
+    if len(datapoints) == 2:
+        train_datapoints, val_datapoints = datapoints
+        train_dataset = PromptDatasetTrain(
+            datapoints=train_datapoints,
+            tokenizer=tokenizer
+        )
         val_dataset = PromptDatasetTrain(
             datapoints=val_datapoints,
             tokenizer=tokenizer
         )
+    else:
+        train_datapoints = datapoints[0]
+        full_dataset = PromptDatasetTrain(
+            datapoints=train_datapoints,
+            tokenizer=tokenizer
+        )
+        total_size = len(full_dataset)
+        train_size = int(0.8 * total_size)  # 80% for training
+        val_size = total_size - train_size    # 20% for validation
+        train_dataset, val_dataset = torch.utils.data.random_split(
+            full_dataset, [train_size, val_size]
+        )        
 
 
 

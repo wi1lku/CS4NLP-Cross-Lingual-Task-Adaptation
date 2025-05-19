@@ -14,10 +14,7 @@ def _get_datapoints(data_path: str, size: float):
 
     return datapoints
 
-def get_datapoints(train_data_path: str,
-                 test_data_path: str,
+def get_datapoints(data_paths,
                  size: float,
                  language: str):
-    train_datapoints = _get_datapoints(train_data_path, size)
-    test_datapoints = _get_datapoints(test_data_path, size)
-    return train_datapoints, test_datapoints
+    return [_get_datapoints(data_path, size) for data_path in data_paths]
