@@ -84,7 +84,7 @@ if WANDB:
     wandb.init(
         entity="cs4nlp",
         project=PROJECT_NAME,
-        name=MODEL_NAME,
+        name=f"train_{MODEL_NAME}",
         config = {
             "language": LANGUAGE,
             "ds_size": DS_SIZE,
@@ -139,8 +139,6 @@ def main():
     print(f"Dataset size: {DS_SIZE}")
     print(f"Dataset paths: {[os.path.abspath(path) for path in DATA_PATHS]}")
 
-
-
     datapoints = get_datapoints(DATA_PATHS, DS_SIZE, LANGUAGE)
 
     if len(datapoints) == 2:
@@ -165,9 +163,6 @@ def main():
         train_dataset, val_dataset = torch.utils.data.random_split(
             full_dataset, [train_size, val_size]
         )        
-
-
-
 
 
     train_loader = DataLoader(
