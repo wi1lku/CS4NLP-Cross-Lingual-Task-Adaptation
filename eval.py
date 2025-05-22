@@ -51,10 +51,10 @@ LANGUAGE = args.language
 
 if PROJECT_NAME == "NLI":
     from nli.data import get_datapoints
-    from nli.utils import refine_predictions, correct_label
+    from nli.utils import refine_predictions
 else: 
     from pos.data import get_datapoints
-    from pos.utils import refine_predictions, correct_label
+    from pos.utils import refine_predictions
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -93,10 +93,10 @@ def evaluate_model(model, tokenizer, dataloader, device):
             labels.extend(batch["label"])
 
         # Refine predictions
-        predictions = refine_predictions(predictions)
+        labels, predictions = refine_predictions(labels, predictions)
 
         # Calculate metrics
-        metrics = calculate_metrics(labels, predictions, correct_label)
+        metrics = calculate_metrics(labels, predictions)
         for k in list(metrics.keys()):
             metrics["test_" + k] = metrics.pop(k)
 

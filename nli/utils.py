@@ -4,7 +4,7 @@ from torch import Tensor
 from transformers import PreTrainedTokenizer
 
 
-def refine_predictions(predictions: List[str]) -> List[str]:
+def refine_predictions(labels: List[str], predictions: List[str]) -> Tuple[List[str], List[str]]:
     """
     Refine predictions to match the expected labels.
     Args:
@@ -12,28 +12,16 @@ def refine_predictions(predictions: List[str]) -> List[str]:
     Returns:
         List[str]: Refined list of predicted labels.
     """
-    labels = ["contradiction", "entailment", "neutral"]
+    possible_labels = ["contradiction", "entailment", "neutral"]
     refined_predictions = []
     for prediction in predictions:
         added = False
-        for label in labels:
+        for label in possible_labels:
             if prediction.startswith(label):
                 refined_predictions.append(label)
                 added = True
                 break
         if not added:
             refined_predictions.append("undefined")
-    return refined_predictions
+    return labels, refined_predictions
 
-
-
-def correct_label(label1: str, label2: str) -> bool:
-    """
-    Check if the two labels are equal.
-    Args:
-        label1 (str): First label.
-        label2 (str): Second label.
-    Returns:
-        bool: True if the labels are equal, False otherwise.
-    """
-    return label1 == label2

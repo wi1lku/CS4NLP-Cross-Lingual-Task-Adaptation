@@ -71,11 +71,11 @@ DATA_PATHS = args.data_paths
 OUTPUT_DIR = args.output_dir
 
 if PROJECT_NAME == "NLI":
-    from nli.utils import refine_predictions, correct_label
+    from nli.utils import refine_predictions
     from nli.data import get_datapoints
 
 elif PROJECT_NAME == "POS":
-    from pos.utils import refine_predictions, correct_label
+    from pos.utils import refine_predictions
     from pos.data import get_datapoints
 
 
@@ -237,8 +237,8 @@ def main():
         train_losses.append(train_loss)
 
         # Calculate training metrics
-        predictions = refine_predictions(predictions)
-        metrics = calculate_metrics(labels, predictions, correct_label)
+        labels, predictions = refine_predictions(labels, predictions)
+        metrics = calculate_metrics(labels, predictions)
         for k in list(metrics.keys()):
             metrics["train_" + k] = metrics.pop(k)
 
@@ -273,8 +273,8 @@ def main():
         val_losses.append(val_loss)
 
         # Calculate validation metrics
-        predictions = refine_predictions(predictions)
-        metrics = calculate_metrics(labels, predictions, correct_label)
+        labels, predictions = refine_predictions(labels, predictions)
+        metrics = calculate_metrics(labels, predictions)
         for k in list(metrics.keys()):
             metrics["val_" + k] = metrics.pop(k)
 
