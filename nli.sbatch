@@ -10,6 +10,6 @@ data_fracs=(0.25 0.75)
 
 for lang in "${langs[@]}"; do
     for data_frac in "${data_fracs[@]}"; do
-      python fine-tune.py --language=$lang --ds_size=$data_frac  --num_epochs=10 --batch_size=4 --model_name="${lang}_${data_frac}" --wandb
+      python fine-tune.py --language=$lang --ds_size=$data_frac  --num_epochs=10 --batch_size=4 --model_name="${lang}_${data_frac}" --output_dir="./nli/output/adapters" --wandb
     done
 done
