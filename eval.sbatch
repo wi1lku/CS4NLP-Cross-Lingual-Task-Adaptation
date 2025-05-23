@@ -4,5 +4,9 @@
 
 module add cuda/12.6
 
-source .venv/bin/activate
-python eval.py --adapter_path "./output/adapters/fr_0.5/" --language "fr"
+source ~/cil-env/bin/activate
+python eval.py --project_name "NLI" --train_lang "fr" --test_lang "tr" --data_frac 0.5 --batch_size 16
+python eval.py --project_name "NLI" --train_lang "en" --test_lang "tr" --data_frac 0.5 --batch_size 16
+python eval.py --project_name "NLI" --train_lang "en" --test_lang "tr" --data_frac 1.0 --batch_size 16
+python eval.py --project_name "NLI" --train_lang "de" --test_lang "tr" --data_frac 0.5 --batch_size 16
+python eval.py --project_name "NLI" --train_lang "de" --test_lang "tr" --data_frac 1.0 --batch_size 16
