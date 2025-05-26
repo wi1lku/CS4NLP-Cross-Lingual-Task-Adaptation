@@ -1,4 +1,6 @@
 from typing import List, Tuple, Dict
+import json
+
 import torch
 from torch import Tensor
 from transformers import PreTrainedTokenizer
@@ -60,3 +62,26 @@ def get_predictions_labels(
     ]
     
     return predictions, labels
+
+
+def save_results(metrics: Dict[str, float], results_path: str, test_lang: str, train_lang: str, data_frac: float) -> None:
+    """
+    Save the evaluation results to a file.
+    Args:
+        metrics (Dict[str, float]): Dictionary containing evaluation metrics.
+        results_path (str): Path to save the results.
+        test_lang (str): Language of the test data.
+        train_lang (str): Language of the training data.
+        data_frac (float): Fraction of data used for training.
+    """
+    with open(results_path, "r") as f:
+        results = json.load(f)
+
+    if train_lang == "base":
+        for train_lang in results[test_lang]:
+            results[test_lang][train_lang][str(0.0)] = metrics
+    else:
+        results[test_lang][train_lang][str(data_frac)] = metrics
+
+    with open(results_path, "w") as f:
+        json.dump(results, f, indent=4)
