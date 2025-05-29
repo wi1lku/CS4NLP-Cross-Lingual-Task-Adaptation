@@ -6,9 +6,9 @@ def get_datapoint(conllu_sentence):
     label_list = []
     for word in conllu_sentence:
         sentence_list.append(f"{word['form']}")
-        label_list.append(f"{word['form']}/{"CONTR" if word['upos'] == '_' else word['upos']}")
+        label_list.append(f"{word['form']}/{'CONTR' if word['upos'] == '_' else word['upos']}")
     sentence = " ".join(sentence_list)
-    label = " ".join(label_list)
+    label = "  ".join(label_list)
     
     return {
         "sentence": sentence,
