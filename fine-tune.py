@@ -42,8 +42,6 @@ MODEL_NAME = "best_adapter"
 
 # Paths
 MODEL_PATH = "./models/llama-3.2-1b"
-OUTPUT_DIR = "./output/adapter"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Arguments
 parser = argparse.ArgumentParser()
@@ -55,7 +53,7 @@ parser.add_argument("--batch_size", type=int, default=BATCH_SIZE, help="Batch si
 parser.add_argument("--model_name", type=str, default=MODEL_NAME, help="Name of the output model file")
 parser.add_argument("--project_name", type=str, default="NLI", help="Project name")
 parser.add_argument("--data_paths", type=str, nargs='+', default=["./nli/data/xnli.dev.jsonl"], help="Path to the training data")
-parser.add_argument("--output_dir", type=str, default=OUTPUT_DIR, help="Output directory for the model")
+parser.add_argument("--output_dir", type=str, required=True, help="Output directory for the model")
 args = parser.parse_args()
 
 
@@ -69,6 +67,8 @@ DS_SIZE = args.ds_size
 PROJECT_NAME = args.project_name
 DATA_PATHS = args.data_paths
 OUTPUT_DIR = args.output_dir
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 
 if PROJECT_NAME == "NLI":
     from nli.utils import refine_predictions

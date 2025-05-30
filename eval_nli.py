@@ -18,7 +18,6 @@ from utils.metrics import calculate_metrics, save_results
 TEST_DATA_PATH = "./nli/data/xnli.test.jsonl"
 ADAPTERS_DIR = "./nli/output/adapters/"
 RESULTS_PATH = "./nli/results.json"
-BASE_MODEL_PATH = "./models/llama-3.2-1b"
 NUM_WORKERS = 2
 PIN_MEMORY = True
 
@@ -68,10 +67,10 @@ WANDB = args.wandb
 
 if PROJECT_NAME == "NLI":
     from nli.data import get_datapoints
-    from nli.utils import refine_predictions
+    from nli.utils import refine_predictions, correct_label
 else: 
     from pos.data import get_datapoints
-    from pos.utils import refine_predictions
+    from pos.utils import refine_predictions, correct_label
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -110,10 +109,10 @@ def evaluate_model(model, tokenizer, dataloader):
             labels.extend(batch["label"])
 
         # Refine predictions
-        labels, predictions = refine_predictions(labels, predictions)
+        predictions = refine_predictions(predictions)
 
         # Calculate metrics
-        metrics = calculate_metrics(labels, predictions)
+        metrics = calculate_metrics(labels, predictions, correct_label)
 
     # Saving results
     print("Saving results...")
@@ -129,14 +128,10 @@ def evaluate_model(model, tokenizer, dataloader):
 
 
 def main():
-    
-    if TRAIN_LANG == "base":
-        base_model_path = BASE_MODEL_PATH
-    else:
-        config_file = os.path.join(ADAPTER_PATH, "adapter_config.json")
-        with open(config_file) as f:
-            cfg = json.load(f)
-        base_model_path = cfg["base_model_name_or_path"]
+    config_file = os.path.join(ADAPTER_PATH, "adapter_config.json")
+    with open(config_file) as f:
+        cfg = json.load(f)
+    base_model_path = cfg["base_model_name_or_path"]
 
     # Initialize wandb if specified
     if WANDB:
@@ -158,13 +153,12 @@ def main():
     # Load model and tokenizer
     print(f"\nLoading base model from  {base_model_path}")
     print(f"Loading LoRA adapter from {ADAPTER_PATH}")
-    print(f"Evaluating on {TEST_LANG} set")
     tokenizer = AutoTokenizer.from_pretrained(base_model_path)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
     base_model = AutoModelForCausalLM.from_pretrained(base_model_path)
-    model = base_model if TRAIN_LANG == "base" else PeftModel.from_pretrained(base_model, ADAPTER_PATH)
+    model = PeftModel.from_pretrained(base_model, ADAPTER_PATH)
     model = model.to(DEVICE)
     model.generation_config.pad_token_id = tokenizer.pad_token_id
 
