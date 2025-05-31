@@ -91,7 +91,7 @@ def evaluate_model(model, tokenizer, dataloader):
             outputs = model.generate(
                 input_ids=inputs['input_ids'],
                 attention_mask=inputs['attention_mask'],
-                max_new_tokens=5,
+                max_new_tokens=len(inputs['input_ids'][0])*3,
                 do_sample=False,
                 temperature=None,
                 top_p=None
@@ -107,7 +107,7 @@ def evaluate_model(model, tokenizer, dataloader):
                 tokenizer.decode(prediction, skip_special_tokens=True).strip().lower()
                 for prediction in predictions_ids
             ])
-            labels.extend(batch["label"])
+            labels.extend([label.strip().lower() for label in batch["label"]])
 
         # Refine predictions
         labels, predictions = refine_predictions(labels, predictions)

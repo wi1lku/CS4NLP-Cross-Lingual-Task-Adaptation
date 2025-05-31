@@ -79,9 +79,10 @@ def save_results(metrics: Dict[str, float], results_path: str, test_lang: str, t
 
     if train_lang == "base":
         for train_lang in results[test_lang]:
-            results[test_lang][train_lang][str(0.0)] = metrics
+            results.setdefault(test_lang, {}).setdefault(train_lang, {})[str(0.0)]  = metrics
     else:
-        results[test_lang][train_lang][str(data_frac)] = metrics
+        # results[test_lang][train_lang][str(data_frac)] = metrics
+        results.setdefault(test_lang, {}).setdefault(train_lang, {})[str(data_frac)] = metrics
 
     with open(results_path, "w") as f:
         json.dump(results, f, indent=4)
