@@ -7,7 +7,7 @@ from transformers import PreTrainedTokenizer
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 
-def calculate_metrics(labels: List[str], predictions: List[str], correct_label) -> Dict[str, float]:
+def calculate_metrics(labels: List[str], predictions: List[str]) -> Dict[str, float]:
     """
     Calculate accuracy, precision, recall, and F1 score for the given labels and predictions.
     Args:
@@ -17,7 +17,7 @@ def calculate_metrics(labels: List[str], predictions: List[str], correct_label) 
         Dict[str, float]: Dictionary containing accuracy, precision, recall, and F1 score.
     """
     return {
-        "n_correct": sum(correct_label(el1,el2) for el1, el2 in zip(labels, predictions)),
+        "n_correct": sum(el1 == el2 for el1, el2 in zip(labels, predictions)),
         "n_total": len(labels),
         "accuracy": accuracy_score(labels, predictions),
         "precision_micro": precision_score(labels, predictions, average="micro"),
@@ -79,9 +79,10 @@ def save_results(metrics: Dict[str, float], results_path: str, test_lang: str, t
 
     if train_lang == "base":
         for train_lang in results[test_lang]:
-            results[test_lang][train_lang][str(0.0)] = metrics
+            results.setdefault(test_lang, {}).setdefault(train_lang, {})[str(0.0)]  = metrics
     else:
-        results[test_lang][train_lang][str(data_frac)] = metrics
+        # results[test_lang][train_lang][str(data_frac)] = metrics
+        results.setdefault(test_lang, {}).setdefault(train_lang, {})[str(data_frac)] = metrics
 
     with open(results_path, "w") as f:
         json.dump(results, f, indent=4)

@@ -68,10 +68,10 @@ WANDB = args.wandb
 
 if PROJECT_NAME == "NLI":
     from nli.data import get_datapoints
-    from nli.utils import refine_predictions, correct_label
+    from nli.utils import refine_predictions
 else: 
     from pos.data import get_datapoints
-    from pos.utils import refine_predictions, correct_label
+    from pos.utils import refine_predictions
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -91,7 +91,7 @@ def evaluate_model(model, tokenizer, dataloader):
             outputs = model.generate(
                 input_ids=inputs['input_ids'],
                 attention_mask=inputs['attention_mask'],
-                max_new_tokens=5,
+                max_new_tokens=len(inputs['input_ids'][0])*3,
                 do_sample=False,
                 temperature=None,
                 top_p=None
@@ -107,13 +107,13 @@ def evaluate_model(model, tokenizer, dataloader):
                 tokenizer.decode(prediction, skip_special_tokens=True).strip().lower()
                 for prediction in predictions_ids
             ])
-            labels.extend(batch["label"])
+            labels.extend([label.strip().lower() for label in batch["label"]])
 
         # Refine predictions
-        predictions = refine_predictions(predictions)
+        labels, predictions = refine_predictions(labels, predictions)
 
         # Calculate metrics
-        metrics = calculate_metrics(labels, predictions, correct_label)
+        metrics = calculate_metrics(labels, predictions)
 
     # Saving results
     print("Saving results...")
