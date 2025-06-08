@@ -50,6 +50,7 @@ parser.add_argument("--wandb", action=argparse.BooleanOptionalAction, help="Flag
 parser.add_argument("--ds_size", type=float, default=DS_SIZE, help="Size of the dataset to use (float)")
 parser.add_argument("--num_epochs", type=int, default=NUM_EPOCHS, help="Number of epochs to train")
 parser.add_argument("--batch_size", type=int, default=BATCH_SIZE, help="Batch size for training")
+parser.add_argument("--base_model_path", type=str, default=MODEL_PATH, help="Path to the base model")
 parser.add_argument("--model_name", type=str, default=MODEL_NAME, help="Name of the output model file")
 parser.add_argument("--project_name", type=str, default="NLI", help="Project name")
 parser.add_argument("--data_paths", type=str, nargs='+', default=["./nli/data/xnli.dev.jsonl"], help="Path to the training data")
@@ -60,6 +61,7 @@ args = parser.parse_args()
 # Override default arguments if provided
 WANDB = args.wandb
 LANGUAGE = args.language
+MODEL_PATH = args.base_model_path
 MODEL_NAME = args.model_name
 NUM_EPOCHS = args.num_epochs
 BATCH_SIZE = args.batch_size
