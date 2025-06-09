@@ -9,6 +9,93 @@ from scipy.stats import spearmanr
 import numpy as np
 import math
 
+code2name = {
+    'ar': 'Arabic',
+    'bg': 'Bulgarian',
+    'cs': 'Czech',
+    'de': 'German',
+    'el': 'Greek',
+    'en': 'English',
+    'es': 'Spanish',
+    'fi': 'Finnish',
+    'fr': 'French',
+    'gl': 'Galician',
+    'hi': 'Hindi',
+    'id': 'Indonesian',
+    'is': 'Icelandic',
+    'it': 'Italian',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'pl': 'Polish',
+    'pt': 'Portuguese',
+    'ru': 'Russian',
+    'sv': 'Swedish',
+    'sw': 'Swahili',
+    'th': 'Thai',
+    'tr': 'Turkish',
+    'ur': 'Urdu',
+    'vi': 'Vietnamese',
+    'zh': 'Chinese'
+}
+
+code2color = {
+    'ar': '#e6194b',
+    'bg': '#3cb44b',
+    'cs': '#ffe119',
+    'de': '#0082c8',
+    'el': '#f58231',
+    'en': '#911eb4',
+    'es': '#46f0f0',
+    'fi': '#f032e6',
+    'fr': '#000080',
+    'gl': '#fabebe',
+    'hi': '#008080',
+    'id': '#e6beff',
+    'is': '#aa6e28',
+    'it': '#800000',
+    'ja': '#aaffc3',
+    'ko': '#808000',
+    'pl': '#ff88aa',
+    'pt': '#d2f53c',
+    'ru': '#808080',
+    'sv': "#0cf63f",
+    'sw': '#9a6324',
+    'th': '#4363d8',
+    'tr': '#ffe0b3',
+    'ur': '#bfef45',
+    'vi': '#fabed4',
+    'zh': '#a9a9a9'
+}
+
+language_code_map = {
+    'ar': 'arb',  # Arabic
+    'bg': 'bul',  # Bulgarian
+    'de': 'deu',  # German
+    'el': 'ell',  # Greek
+    'en': 'eng',  # English
+    'es': 'spa',  # Spanish
+    'fr': 'fra',  # French
+    'hi': 'hin',  # Hindi
+    'ru': 'rus',  # Russian
+    'sw': 'swa',  # Swahili
+    'th': 'tha',  # Thai
+    'tr': 'tur',  # Turkish
+    'ur': 'urd',  # Urdu
+    'vi': 'vie',  # Vietnamese
+    'zh': 'zho',  # Chinese
+    'cs': 'ces',  # Czech
+    'gl': 'glg',  # Galician
+    'fi': 'fin',  # Finnish
+    'is': 'isl',  # Icelandic
+    'it': 'ita',  # Italian
+    'ja': 'jpn',  # Japanese
+    'ko': 'kor',  # Korean
+    'pl': 'pol',  # Polish
+    'pt': 'por',  # Portuguese
+    'id': 'ind',  # Indonesian
+    'sv': 'swe',  # Swedish
+}
+
 def invert_structure(original):
     transformed = defaultdict(lambda: defaultdict(dict))
 
@@ -82,38 +169,6 @@ def plot_results(results, lang_train, metrics='all'):
     plt.tight_layout()
     plt.show()
 
-
-language_code_map = {
-    'ar': 'arb',  # Arabic
-    'bg': 'bul',  # Bulgarian
-    'de': 'deu',  # German
-    'el': 'ell',  # Greek
-    'en': 'eng',  # English
-    'es': 'spa',  # Spanish
-    'fr': 'fra',  # French
-    'hi': 'hin',  # Hindi
-    'ru': 'rus',  # Russian
-    'sw': 'swa',  # Swahili
-    'th': 'tha',  # Thai
-    'tr': 'tur',  # Turkish
-    'ur': 'urd',  # Urdu
-    'vi': 'vie',  # Vietnamese
-    'zh': 'zho',  # Chinese
-    'cs': 'ces',  # Czech
-    'gl': 'glg',  # Galician
-    'fi':  'fin',  # Finnish
-    'is': 'isl',  # Icelandic
-    'it': 'ita',  # Italian
-    'ja': 'jpn',  # Japanese
-    'ko': 'kor',  # Korean
-    'pl': 'pol',  # Polish
-    'pt': 'por',  # Portuguese
-    'id': 'ind',  # Indonesian
-    'sv': 'swe',  # Swedish
-}
-
-# langs_three_digits = [language_code_map[lang] for lang in languages if lang in language_code_map]
-
 def get_langs_three_digits(languages):
     langs_three_digits = []
     for lang in languages:
@@ -132,17 +187,14 @@ def compute_correlation(results_per_eval, distance_dfs, distance, metric='accura
 
     for target_lang in results_per_eval:
         for source_lang in results_per_eval[target_lang]:
-            try:
-                acc = results_per_eval[target_lang][source_lang][data_fraction][metric]
-                if acc is None:
-                    continue
-                dist = distance_dfs[distance].loc[source_lang, target_lang]
-
-                source_target_pairs.append((source_lang, target_lang))
-                accuracies.append(acc)
-                distances.append(dist)
-            except KeyError:
+            acc = results_per_eval[target_lang][source_lang][data_fraction][metric]
+            if acc is None:
                 continue
+            dist = distance_dfs[distance].loc[source_lang, target_lang]
+
+            source_target_pairs.append((source_lang, target_lang))
+            accuracies.append(acc)
+            distances.append(dist)
 
     # 2. Correlation analysis
     correlation, pval = spearmanr(distances, accuracies)
@@ -151,6 +203,8 @@ def compute_correlation(results_per_eval, distance_dfs, distance, metric='accura
     # 4. Visualize metric heatmap if requested
     if visualize_heatmap:
         plot_heatmap(source_target_pairs, accuracies, metric=metric, data_fraction=data_fraction)
+
+    return correlation, pval
 
 
 def plot_heatmap(source_target_pairs, accuracies, metric='accuracy', data_fraction='1.0', languages=None):
@@ -407,4 +461,99 @@ def plot_radar_sources_for_targets(results_per_train, target_langs, data_fractio
     ax.set_title(f"{metric.capitalize()} Transfer from Sources to Targets (data fraction = {data_fraction})", fontsize=14)
     ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.05), title="Target Language")
     plt.tight_layout()
+    plt.show()
+
+
+def plot_eval_language(results, langs_eval, metric='accuracy', task='POS Tagging'):
+    plt.rcParams['font.size'] = 16
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharex=True)
+    langs_train = sorted(results[langs_eval[0]].keys())
+
+    all_lines = []
+    all_labels = []
+
+    for i, lang_eval in enumerate(langs_eval):
+        ax = axes[i]
+        for lang_train in langs_train:
+            data_fractions = ['0.25', '0.5', '0.75', '1.0']
+            values = [results[lang_eval][lang_train][d_fraq][metric] for d_fraq in data_fractions]
+            if data_fractions:
+                x_y = sorted(zip(data_fractions, values))
+                x_sorted, y_sorted = zip(*x_y)
+                line, = ax.plot(x_sorted, y_sorted, 'o-', label=lang_train,
+                                color=code2color[lang_train], alpha=0.8, linewidth=3, markersize=8)
+                if lang_train not in all_labels:
+                    all_lines.append(line)
+                    all_labels.append(lang_train)
+
+        ax.set_title(f"Target {code2name[lang_eval]}")
+        ax.set_xlabel("Data Fraction Used for Training")
+        ax.grid(True)
+        ax.set_ylim(0, 1)
+
+    axes[0].set_ylabel(metric.capitalize())
+
+    fig.legend(all_lines, all_labels, title="Source lang.",
+                bbox_to_anchor=(0.5, -0.1), loc='lower center',
+                ncol=min(len(all_labels), 11), fontsize='small', frameon=False)
+
+    plt.suptitle(f"{task} Cross-Lingual Transfer", fontsize=20)
+    plt.tight_layout(rect=[0, 0.05, 1, 1])  # leave space at bottom for legend
+    plt.show()
+
+
+def plot_accuracy_vs_data_fraction_per_eval(results_per_eval, fractions, metric='accuracy', task="", langs_eval=None):
+    if langs_eval is None:
+        langs_eval = sorted(results_per_eval.keys())
+    langs_train = sorted(results_per_eval[langs_eval[0]].keys())
+    n_sources = len(langs_train)
+    n_cols = 3
+    n_rows = int(np.ceil(n_sources / n_cols))
+
+    plt.rcParams['font.size'] = 16
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 3 * n_rows), sharey=True)
+    axes = axes.flatten()
+
+    all_handles = {}
+
+    for i, lang_eval in enumerate(langs_eval):
+        ax = axes[i]
+        for lang_train in results_per_eval[lang_eval]:
+            present_fractions = []
+            values = []
+
+            for frac in fractions:
+                score = results_per_eval[lang_eval][lang_train][frac][metric]
+                if score is not None:
+                    present_fractions.append(float(frac))
+                    values.append(score)
+
+            if present_fractions:
+                x_y = sorted(zip(present_fractions, values))
+                x_sorted, y_sorted = zip(*x_y)
+                line, = ax.plot(x_sorted, y_sorted, label=lang_train, marker='o', color=code2color[lang_train])
+                all_handles[lang_train] = line
+
+        ax.set_xticks([0.25, 0.5, 0.75, 1.0])
+        ax.set_xticklabels(["0.25", "0.5", "0.75", "1.0"])
+        ax.grid(True)
+        ax.set_ylim(0, 1)
+        ax.set_title(f"Target {code2name[lang_eval]}")
+        ax.set_xlabel("Data Fraction Used for Training")
+        if i % n_cols == 0:
+            ax.set_ylabel(metric.capitalize())
+
+    # Hide unused subplots
+    for j in range(i + 1, len(axes)):
+        fig.delaxes(axes[j])
+
+    labels, handles = zip(*sorted(all_handles.items()))
+
+    plt.tight_layout(rect=[0, -0.3, 1, 0.96])
+    plt.legend(handles, labels, title="Source lang.",
+                bbox_to_anchor=(-0.7, -0.7), loc='lower center',
+                ncol=min(len(labels), 11), fontsize='small', frameon=False)
+    if task != "":
+        task = f"{task}: "
+    fig.suptitle(f"{task}{metric.capitalize()} vs. Fine-Tuning Data Fraction", fontsize=20)
     plt.show()
