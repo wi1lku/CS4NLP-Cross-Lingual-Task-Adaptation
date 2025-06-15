@@ -96,6 +96,30 @@ language_code_map = {
     'sv': 'swe',  # Swedish
 }
 
+def get_langs_three_digits(languages):
+    langs_three_digits = []
+    for lang in languages:
+        if lang in language_code_map:
+            langs_three_digits.append(language_code_map[lang])
+        else:
+            print(f"Warning: Language '{lang}' not found in mapping.")
+    return langs_three_digits
+
+
+def get_distances(languages):
+    langs_three_digits = get_langs_three_digits(languages)
+    distance_matrices = defaultdict(list)
+    distance_dfs = defaultdict(pd.DataFrame)
+    for distance in l2v.DISTANCES:
+        distance_matrices[distance] = l2v.distance(distance, langs_three_digits)
+
+        distance_matrix = distance_matrices[distance]
+
+        distance_dfs[distance] = pd.DataFrame(distance_matrix, index=languages, columns=languages)
+
+    return distance_dfs
+
+
 def invert_structure(original):
     transformed = defaultdict(lambda: defaultdict(dict))
 
@@ -169,14 +193,6 @@ def plot_results(results, lang_train, metrics='all'):
     plt.tight_layout()
     plt.show()
 
-def get_langs_three_digits(languages):
-    langs_three_digits = []
-    for lang in languages:
-        if lang in language_code_map:
-            langs_three_digits.append(language_code_map[lang])
-        else:
-            print(f"Warning: Language '{lang}' not found in mapping.")
-    return langs_three_digits
 
 def compute_correlation(results_per_eval, distance_dfs, distance, metric='accuracy', data_fraction=1.0, visualize_heatmap=True):
     data_fraction = str(data_fraction)
@@ -371,7 +387,6 @@ def compute_language_rank_across_targets(results_per_train, data_fractions, metr
                 continue  # skip self-transfer
 
             source_scores = []
-            source_distances = []
             for source_lang in results_per_train[target_lang]:
                 if source_lang == target_lang:
                     continue  # optionally skip self-transfer
@@ -384,9 +399,11 @@ def compute_language_rank_across_targets(results_per_train, data_fractions, metr
                         source_scores.append((source_lang, score))
                 except KeyError:
                     continue
-            # Rank sources by descending score
-            source_scores.sort(key=lambda x: x[1], reverse=metric != "distance")
-            perf_ranks = {lang: rank+1 for rank, (lang, _) in enumerate(source_scores)}
+            # Rank sources by descending score, giving using max method to resolve ties
+            source_scores_df = pd.DataFrame(source_scores, columns=['Source', 'Score'])
+            source_scores_df["rank"] = source_scores_df['Score'].rank(ascending=(metric == 'distance'), method='average')
+            perf_ranks = source_scores_df.set_index('Source')['rank'].to_dict()
+
 
             # Get English rank (if available)
             if language_code in perf_ranks:
@@ -400,17 +417,60 @@ def compute_language_rank_across_targets(results_per_train, data_fractions, metr
                 })
     return pd.DataFrame(rank_records)
 
-def plot_ranks(ranks_df, dist_ranks_df, language_code='en'):
-    fig, axes = plt.subplots(1,2, figsize=(10, 6), gridspec_kw={'width_ratios': [4, 1]}, sharey=True)
-    sns.boxplot(data=ranks_df, x='Data Fraction', y=f'Rank', ax =axes[0])
-    axes[0].set_title(f"Rank of {language_code} as Source Language Across Targets")
-    axes[0].set_ylabel("Rank (lower is better)")
-    sns.boxplot(data=dist_ranks_df, x='Data Fraction', y='Rank', color='lightgray', fliersize=0, width=0.4, ax=axes[1])
-    for ax in axes:
-        ax.grid(True)
+def plot_ranks(ranks, dist_ranks, language_codes='en'):
+    if isinstance(language_codes, str):
+        language_codes = [language_codes]
+    
+    num_langs = len(language_codes)
+    ncols = 3  # number of plot *pairs* per row
+    nrows = math.ceil(num_langs / ncols)
+
+    fig, axes = plt.subplots(nrows, ncols * 2, figsize=(10 * ncols, 6 * nrows),
+                             gridspec_kw={'width_ratios': [4, 1] * ncols},
+                             sharey='row')
+    
+    # Normalize axes shape
+    if num_langs == 1:
+        axes = [axes]
+    elif nrows == 1:
+        axes = [axes]
+    else:
+        axes = axes.reshape((nrows, ncols * 2))
+
+    for idx, lang_code in enumerate(language_codes):
+        row = idx // ncols
+        col_offset = (idx % ncols) * 2
+        ax_main = axes[row][col_offset]
+        ax_dist = axes[row][col_offset + 1]
+
+        ranks_df = ranks[lang_code]
+        dist_ranks_df = dist_ranks[lang_code]
+
+        sns.boxplot(data=ranks_df, x='Data Fraction', y='Rank', ax=ax_main)
+        ax_main.set_title(f"Rank of {code2name[lang_code]} as Source Language Across Targets", fontsize=20)
+        ax_main.set_ylabel("Rank (lower is better)", fontsize=16)
+        ax_main.set_xlabel("Data Fraction", fontsize=16)
+
+        sns.boxplot(data=dist_ranks_df, x='Data Fraction', y='Rank', color='lightgray', 
+                    fliersize=0, width=0.4, ax=ax_dist)
+        ax_dist.set_xlabel("")
+        ax_dist.tick_params(labelsize=16)
+
+
+        
+        for ax in [ax_main, ax_dist]:
+            ax.grid(True)
+            ax.set(ylim=(1, dist_ranks_df.shape[0] + 1))
+
+    # Remove unused axes if total subplot slots > needed
+    total_axes = nrows * ncols * 2
+    for j in range(2 * num_langs, total_axes):
+        row = j // (2 * ncols)
+        col = j % (2 * ncols)
+        fig.delaxes(axes[row][col])
+
     plt.tight_layout()
     plt.show()
-
 
 import matplotlib.pyplot as plt
 import numpy as np
