@@ -6,10 +6,8 @@
 module add cuda/12.6.0
 source .venv/bin/activate
 
-#pos: ("ar" "cs" "de" "gl" "en" "es" "fr" "fi" "hi" "is" "it" "ru" "ja" "ko" "pl" "pt" "tr" "id" "zh" "th")
-# nli: ("ar" "bg" "de" "el" "en" "es" "fr" "hi" "ru" "sw" "th" "tr" "ur" "vi" "zh")
-langs=("ar" "de" "en" "es" "fr" "hi" "ru" "th" "tr" "zh")
-data_fracs=(0.5 1.0)
+langs=("ar" "cs" "de" "gl" "en" "es" "fr" "fi" "hi" "is" "it" "ru" "ja" "ko" "pl" "pt" "tr" "id" "zh" "th")
+data_fracs=(0.25 0.5 0.75 1.0)
 epochs=10
 
 for lang in "${langs[@]}"; do
